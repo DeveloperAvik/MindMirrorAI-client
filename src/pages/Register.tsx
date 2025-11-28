@@ -1,62 +1,66 @@
-import React, { useState } from "react";
-import { register, verifyOtp } from "../store/authSlice";
-import { useAppDispatch } from "../hooks";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { registerUser } from "../services/api";
+import { useAppDispatch } from "../hooks";
+import { setTempUserId } from "../store/authSlice";
 
 export default function Register() {
-  const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tempId, setTempId] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState(1);
+  const [error, setError] = useState("");
 
-  async function doRegister(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const res = await dispatch(register({ email, password })).unwrap();
-      setTempId((res as any).tempUserId);
-      setStep(2);
-      alert("OTP sent (server console in dev). Enter OTP to verify.");
-    } catch (err: any) {
-      alert("Register failed: " + (err?.message ?? err));
-    }
-  }
+  const registerHandler = async () => {
+    setError("");
 
-  async function doVerify(e: React.FormEvent) {
-    e.preventDefault();
     try {
-      await dispatch(verifyOtp({ tempUserId: tempId, otp })).unwrap();
-      alert("Verified & logged in");
-      navigate("/dashboard");
+      const res = await registerUser(email, password);
+
+      // 🔥 FIX 2 — Always redirect when tempUserId exists
+      if (res.tempUserId) {
+        dispatch(setTempUserId(res.tempUserId));
+        navigate("/verify");
+        return;
+      }
+
+      // If backend didn't send tempUserId
+      setError(res.error || "Registration failed");
+
     } catch (err: any) {
-      alert("Verify failed: " + (err?.message ?? err));
+      setError(err.message || "Registration failed");
     }
-  }
+  };
 
   return (
-    <div className="container">
-      <div className="max-w-md mx-auto bg-white p-6 rounded shadow">
-        {step === 1 ? (
-          <>
-            <h2 className="text-xl font-semibold mb-4">Register</h2>
-            <form onSubmit={doRegister} className="space-y-3">
-              <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded" />
-              <input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-2 border rounded" />
-              <button className="w-full py-2 bg-sky-600 text-white rounded">Register</button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h2 className="text-xl font-semibold mb-4">Verify OTP</h2>
-            <form onSubmit={doVerify} className="space-y-3">
-              <input placeholder="OTP" value={otp} onChange={e => setOtp(e.target.value)} className="w-full p-2 border rounded" />
-              <button className="w-full py-2 bg-sky-600 text-white rounded">Verify & Login</button>
-            </form>
-          </>
-        )}
-      </div>
+    <div className="p-10 max-w-md mx-auto">
+      <h1 className="text-xl font-bold mb-4">Create Account</h1>
+
+      <input
+        className="border p-2 block w-full mt-4"
+        placeholder="Email"
+        type="email"
+        onChange={(e) => setEmail(e.target.value)}
+      />
+
+      <input
+        className="border p-2 block w-full mt-4"
+        placeholder="Password"
+        type="password"
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      {error && (
+        <p className="text-red-500 mt-3">{error}</p>
+      )}
+
+      <button
+        onClick={registerHandler}
+        className="bg-indigo-600 text-white p-2 w-full rounded mt-6"
+      >
+        Register
+      </button>
     </div>
   );
 }
