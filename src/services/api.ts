@@ -1,66 +1,59 @@
-import { API_BASE } from "../config";
+
+export const API_BASE = "http://localhost:4000/api/v1";
 
 async function handleRes(res: Response) {
   const ct = res.headers.get("content-type") || "";
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(txt || res.statusText);
-  }
-  if (ct.includes("application/json")) return res.json();
-  return res.text();
+  if (!res.ok) throw new Error(await res.text() || res.statusText);
+  return ct.includes("application/json") ? res.json() : res.text();
 }
 
 function authHeader(token?: string | null) {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-const defaultExport = {
-  async get(path: string, token?: string | null) {
-    const res = await fetch(`${API_BASE}${path}`, { headers: { ...authHeader(token) } });
-    return handleRes(res);
+// 🔥 Correct default export name: api
+const api = {
+  get(path: string, token?: string | null) {
+    return fetch(`${API_BASE}${path}`, {
+      headers: { ...authHeader(token) },
+    }).then(handleRes);
   },
 
-  async post(path: string, body: any, token?: string | null) {
-    const res = await fetch(`${API_BASE}${path}`, {
+  post(path: string, body: any, token?: string | null) {
+    return fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader(token) },
       body: JSON.stringify(body),
-    });
-    return handleRes(res);
+    }).then(handleRes);
   },
 
-  async postForm(path: string, form: FormData, token?: string | null) {
-    const res = await fetch(`${API_BASE}${path}`, {
+  postForm(path: string, form: FormData, token?: string | null) {
+    return fetch(`${API_BASE}${path}`, {
       method: "POST",
+      headers: { ...authHeader(token) },
       body: form,
-      headers: { ...authHeader(token) }, // browser sets multipart header
-    });
-    return handleRes(res);
+    }).then(handleRes);
   },
 };
 
-// ---------------------------------------------
-// 🔥 AUTH FUNCTIONS (use these in your pages)
-// ---------------------------------------------
+export default api;
 
-export function registerUser(email: string, password: string) {
-  return defaultExport.post("/auth/register", { email, password });
-}
+// AUTH EXPORTS
+export const registerUser = (email: string, password: string) =>
+  api.post("/auth/register", { email, password });
 
-export function verifyOtp(tempUserId: string, otp: string) {
-  return defaultExport.post("/auth/verify-otp", { tempUserId, otp });
-}
+export const verifyOtp = (id: string, otp: string) =>
+  api.post("/auth/verify-otp", { tempUserId: id, otp });
 
-export function resendOtp(tempUserId: string) {
-  return defaultExport.post("/auth/resend-otp", { tempUserId });
-}
+export const resendOtp = (id: string) =>
+  api.post("/auth/resend-otp", { tempUserId: id });
 
-export function loginUser(email: string, password: string) {
-  return defaultExport.post("/auth/login", { email, password });
-}
+export const loginUser = (email: string, password: string) =>
+  api.post("/auth/login", { email, password });
 
-export function refreshToken(refreshToken: string) {
-  return defaultExport.post("/auth/refresh", { refreshToken });
-}
+// SCAN
+export const uploadFace = (form: FormData, token: string) =>
+  api.postForm("/scan/face", form, token);
 
-export default defaultExport;
+export const uploadVoice = (form: FormData, token: string) =>
+  api.postForm("/scan/voice", form, token);

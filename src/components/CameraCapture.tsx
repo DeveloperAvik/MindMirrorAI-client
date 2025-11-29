@@ -1,71 +1,150 @@
-import React, { useRef, useState } from "react";
-import { uploadScan } from "../store/scanSlice";
-import { useAppDispatch } from "../hooks";
-import { useSelector } from "react-redux";
-import { RootState } from "../store";
+// src/components/CameraCapture.tsx
+import React, { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
-export default function CameraCapture() {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [log, setLog] = useState("");
-  const dispatch = useAppDispatch();
-  const token = useSelector((s: RootState) => s.auth.token);
+export default function CameraCapture({
+  onCapture,
+}: {
+  onCapture?: (blob: Blob) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  async function startStream() {
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [captured, setCaptured] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  // -------------------------
+  // START CAMERA
+  // -------------------------
+  async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      mediaStreamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setLog("Camera & mic active. Click Capture to take snapshot and record 6s audio.");
-    } catch (e: any) {
-      setLog("Error accessing camera/mic: " + e.message);
+      const media = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      setStream(media);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = media;
+
+        // Important for MacBook / Safari / Chrome
+        await new Promise<void>((resolve) => {
+          videoRef.current!.onloadedmetadata = () => resolve();
+        });
+
+        await videoRef.current.play();
+        setReady(true);
+      }
+    } catch (err) {
+      console.error("Camera start error:", err);
     }
   }
 
-  async function captureAndUpload() {
-    if (!mediaStreamRef.current || !videoRef.current) { setLog("Start camera first."); return; }
-    setLog("Capturing image and recording audio (6s)...");
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 320;
-    canvas.height = videoRef.current.videoHeight || 240;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const imageBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
-    if (!imageBlob) { setLog("Failed to capture image"); return; }
+  // -------------------------
+  // STOP CAMERA
+  // -------------------------
+  function stopCamera() {
+    stream?.getTracks().forEach((t) => t.stop());
+    setStream(null);
+    setReady(false);
+  }
 
-    const audioTracks = mediaStreamRef.current.getAudioTracks();
-    const recorder = new MediaRecorder(new MediaStream(audioTracks));
-    const chunks: Blob[] = [];
-    recorder.ondataavailable = (e) => chunks.push(e.data);
-    recorder.start();
-    setRecording(true);
-    await new Promise((r) => setTimeout(r, 6000));
-    recorder.stop();
-    await new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
-    setRecording(false);
-    const audioBlob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
-
-    const fd = new FormData();
-    fd.append("image", imageBlob, "capture.jpg");
-    fd.append("audio", audioBlob, "voice.webm");
-
-    try {
-      const result = await dispatch(uploadScan({ formData: fd, token })).unwrap();
-      setLog("Upload success — wellness score: " + result.wellnessScore);
-    } catch (err: any) {
-      setLog("Upload failed: " + (err?.message || JSON.stringify(err)));
+  // -------------------------
+  // CAPTURE PHOTO
+  // -------------------------
+  async function capture() {
+    const video = videoRef.current;
+    if (!video || !ready) {
+      console.warn("Video not ready yet");
+      return;
     }
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    if (width === 0 || height === 0) {
+      console.warn("Video metadata not loaded");
+      return;
+    }
+
+    // Create canvas if missing
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement("canvas");
+    }
+
+    const canvas = canvasRef.current;
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(video, 0, 0, width, height);
+
+    // convert to jpeg
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    setCaptured(dataUrl);
+
+    // Convert DataURL to blob (BEST QUALITY)
+    const blob = await (await fetch(dataUrl)).blob();
+    onCapture?.(blob);
   }
 
   return (
-    <div className="bg-white p-4 rounded shadow">
-      <video ref={videoRef} autoPlay playsInline className="w-full max-w-md bg-black" />
-      <div className="mt-3 space-x-2">
-        <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={startStream}>Start Stream</button>
-        <button className="px-3 py-1 bg-green-600 text-white rounded" onClick={captureAndUpload} disabled={recording}>Capture & Upload</button>
+    <motion.div
+      className="bg-white rounded-xl shadow p-4 border border-slate-200"
+    >
+      <h3 className="font-semibold mb-3 text-slate-800">Camera Scan</h3>
+
+      <div className="w-full h-64 bg-black rounded-lg overflow-hidden">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          playsInline
+          autoPlay
+          muted
+        />
       </div>
-      <div className="mt-3 text-sm text-slate-600">{recording ? "Recording..." : log}</div>
-    </div>
+
+      <div className="mt-4 flex gap-3">
+        {!stream ? (
+          <button
+            onClick={startCamera}
+            className="px-4 py-2 rounded bg-indigo-600 text-white"
+          >
+            Start Camera
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={capture}
+              disabled={!ready}
+              className="px-4 py-2 rounded bg-indigo-600 text-white disabled:opacity-50"
+            >
+              Capture
+            </button>
+
+            <button
+              onClick={stopCamera}
+              className="px-4 py-2 rounded bg-gray-200"
+            >
+              Stop
+            </button>
+          </>
+        )}
+      </div>
+
+      {captured && (
+        <img
+          src={captured}
+          alt="preview"
+          className="mt-4 w-24 h-24 rounded object-cover border"
+        />
+      )}
+    </motion.div>
   );
 }

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import api, { registerUser, verifyOtpApi, loginUser } from "../services/api";
+import api from "../services/api";
 import type { RootState } from ".";
 
 type User = {

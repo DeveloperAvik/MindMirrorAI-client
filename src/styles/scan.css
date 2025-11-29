@@ -1,0 +1,31 @@
+.scan-ring {
+  position: absolute;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-radius: 9999px;
+  animation: pulseRing 2s infinite ease-in-out;
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+}
+
+.breathing {
+  animation: breathingAnim 4s infinite ease-in-out;
+}
+
+@keyframes breathingAnim {
+  0% { opacity: 0.9; }
+  50% { opacity: 1; }
+  100% { opacity: 0.9; }
+}
